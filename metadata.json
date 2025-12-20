@@ -1,0 +1,8 @@
+
+{
+  "name": "TechStore 2025",
+  "description": "Premium Technology Store with AI Insights and Management Dashboard.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
