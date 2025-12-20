@@ -49,7 +49,6 @@ const App: React.FC = () => {
           fetchData();
         })
         .catch(() => {
-          console.warn("Sesión expirada o inválida. Reiniciando...");
           api.logout();
           setAuth({ user: null, token: null, isAuthenticated: false });
           fetchData();
@@ -64,38 +63,30 @@ const App: React.FC = () => {
     setAuthError(null);
     setLoading(true);
     
-    const targetCreds = directCreds || credentials;
+    // Si no hay credenciales directas (demo), usamos el username como password por defecto
+    const targetCreds = directCreds || { 
+      ...credentials, 
+      password: credentials.password || credentials.username 
+    };
 
     try {
       if (isRegistering && !directCreds) {
         await api.register(targetCreds);
         setIsRegistering(false);
-        setAuthError(null);
-        alert("¡Cuenta creada exitosamente! Ya puedes iniciar sesión.");
+        alert("¡Cuenta creada! Por favor inicia sesión con tu email.");
       } else {
         const formData = new FormData();
         formData.append('username', targetCreds.username);
         formData.append('password', targetCreds.password);
-        formData.append('grant_type', 'password'); // Requerido por muchos backends de FastAPI
+        formData.append('grant_type', 'password');
         
         await api.login(formData);
         const token = localStorage.getItem('token');
-        
-        setAuth(prev => ({
-          ...prev,
-          token,
-          isAuthenticated: true
-        }));
-        
+        setAuth(prev => ({ ...prev, token, isAuthenticated: true }));
         setShowLoginModal(false);
       }
     } catch (err: any) {
-      console.error("Auth error:", err);
-      let errorMsg = err.message || 'Error de conexión';
-      if (errorMsg.includes('404')) {
-        errorMsg = "Error: El servidor no reconoce la ruta de autenticación. Verifica la configuración en Render.";
-      }
-      setAuthError(errorMsg);
+      setAuthError(err.message);
     } finally {
       setLoading(false);
     }
@@ -105,7 +96,6 @@ const App: React.FC = () => {
     const creds = type === 'admin' 
       ? { username: 'admin@techstore.com', password: 'admin123' }
       : { username: 'cliente@techstore.com', password: 'cliente123' };
-    
     setCredentials({ ...creds, full_name: '' });
     handleAuth(undefined, creds);
   };
@@ -124,20 +114,6 @@ const App: React.FC = () => {
       if (exists) return prev.map(i => i.id === item.id ? { ...i, quantity: i.quantity + 1 } : i);
       return [...prev, { ...item, quantity: 1, price: item.price || 500 }];
     });
-  };
-
-  const updateQuantity = (id: number, delta: number) => {
-    setCart(prev => prev.map(i => i.id === id ? { ...i, quantity: Math.max(1, i.quantity + delta) } : i));
-  };
-
-  const removeFromCart = (id: number) => {
-    setCart(prev => prev.filter(i => i.id !== id));
-  };
-
-  const handleCheckout = () => {
-    alert("¡Pedido procesado con éxito!");
-    setCart([]);
-    setView('home');
   };
 
   return (
@@ -169,9 +145,9 @@ const App: React.FC = () => {
           {view === 'cart' && (
             <Cart 
               cart={cart} 
-              updateQuantity={updateQuantity} 
-              removeFromCart={removeFromCart} 
-              onCheckout={handleCheckout} 
+              updateQuantity={(id, d) => setCart(p => p.map(i => i.id === id ? {...i, quantity: Math.max(1, i.quantity+d)} : i))} 
+              removeFromCart={(id) => setCart(p => p.filter(i => i.id !== id))} 
+              onCheckout={() => { alert("¡Pedido realizado!"); setCart([]); setView('home'); }} 
             />
           )}
           {view === 'dashboard' && <Dashboard items={items} refreshData={fetchData} />}
@@ -205,25 +181,17 @@ const App: React.FC = () => {
             
             <div className="text-center mb-8">
               <h2 className="text-3xl font-black text-white tracking-tighter uppercase">
-                {isRegistering ? 'Crear Cuenta' : 'Acceso Premium'}
+                {isRegistering ? 'Crear Cuenta' : 'Acceso Instantáneo'}
               </h2>
-              <p className="text-slate-500 font-medium italic">Sincronizado con Render Cloud.</p>
+              <p className="text-slate-500 font-medium italic">Inicia sesión solo con tu email.</p>
             </div>
 
             <div className="mb-8 grid grid-cols-2 gap-3">
-              <button 
-                onClick={() => setDemoUser('admin')}
-                className="py-3 px-3 bg-blue-600/10 border border-blue-500/20 rounded-xl text-[10px] font-black text-blue-400 uppercase tracking-tighter hover:bg-blue-600/20 transition-all flex flex-col items-center gap-1"
-              >
-                <span className="text-lg">🛠️</span>
-                Admin Demo
+              <button onClick={() => setDemoUser('admin')} className="py-3 px-3 bg-blue-600/10 border border-blue-500/20 rounded-xl text-[10px] font-black text-blue-400 uppercase hover:bg-blue-600/20 transition-all flex flex-col items-center">
+                <span>🛠️</span> Admin Demo
               </button>
-              <button 
-                onClick={() => setDemoUser('client')}
-                className="py-3 px-3 bg-emerald-600/10 border border-emerald-500/20 rounded-xl text-[10px] font-black text-emerald-400 uppercase tracking-tighter hover:bg-emerald-600/20 transition-all flex flex-col items-center gap-1"
-              >
-                <span className="text-lg">👤</span>
-                Cliente Demo
+              <button onClick={() => setDemoUser('client')} className="py-3 px-3 bg-emerald-600/10 border border-emerald-500/20 rounded-xl text-[10px] font-black text-emerald-400 uppercase hover:bg-emerald-600/20 transition-all flex flex-col items-center">
+                <span>👤</span> Cliente Demo
               </button>
             </div>
 
@@ -231,60 +199,34 @@ const App: React.FC = () => {
               {isRegistering && (
                 <div className="space-y-1">
                   <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest px-1">Nombre Completo</label>
-                  <input
-                    required
-                    className="w-full bg-slate-950 border border-slate-800 rounded-2xl px-5 py-4 text-white focus:ring-2 focus:ring-blue-500 outline-none"
-                    value={credentials.full_name}
-                    onChange={(e) => setCredentials({ ...credentials, full_name: e.target.value })}
-                  />
+                  <input required className="w-full bg-slate-950 border border-slate-800 rounded-2xl px-5 py-4 text-white focus:ring-2 focus:ring-blue-500 outline-none" value={credentials.full_name} onChange={(e) => setCredentials({ ...credentials, full_name: e.target.value })} />
                 </div>
               )}
               <div className="space-y-1">
                 <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest px-1">Email / Usuario</label>
-                <input
-                  required
-                  type="email"
-                  className="w-full bg-slate-950 border border-slate-800 rounded-2xl px-5 py-4 text-white focus:ring-2 focus:ring-blue-500 outline-none"
-                  value={credentials.username}
-                  onChange={(e) => setCredentials({ ...credentials, username: e.target.value })}
-                />
+                <input required type="email" className="w-full bg-slate-950 border border-slate-800 rounded-2xl px-5 py-4 text-white focus:ring-2 focus:ring-blue-500 outline-none" value={credentials.username} onChange={(e) => setCredentials({ ...credentials, username: e.target.value, password: e.target.value })} />
               </div>
-              <div className="space-y-1">
-                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest px-1">Contraseña</label>
-                <input
-                  required
-                  type="password"
-                  className="w-full bg-slate-950 border border-slate-800 rounded-2xl px-5 py-4 text-white focus:ring-2 focus:ring-blue-500 outline-none"
-                  value={credentials.password}
-                  onChange={(e) => setCredentials({ ...credentials, password: e.target.value })}
-                />
-              </div>
+              
+              {/* Nota: La contraseña se maneja internamente usando el email para simplificar la UI */}
 
               {authError && (
-                <div className="bg-red-500/10 border border-red-500/20 text-red-500 text-xs p-4 rounded-xl font-bold animate-pulse">
-                  ⚠️ {authError}
+                <div className="bg-red-500/10 border border-red-500/20 text-red-500 text-xs p-4 rounded-xl font-bold">
+                  {authError.includes('BLOQUEO DE CORS') ? (
+                    <div className="space-y-2">
+                      <p>🛑 {authError}</p>
+                      <p className="font-normal text-[10px] text-red-400/80 italic">Añade CORSMiddleware a tu archivo main.py en Render.</p>
+                    </div>
+                  ) : `⚠️ ${authError}`}
                 </div>
               )}
 
-              <button
-                disabled={loading}
-                className="w-full py-4 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl font-black text-lg transition-all shadow-xl shadow-blue-900/40 active:scale-95 disabled:opacity-50"
-              >
-                {loading ? (
-                  <div className="flex items-center justify-center gap-2">
-                    <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin"></div>
-                    <span>Sincronizando...</span>
-                  </div>
-                ) : isRegistering ? 'Registrarme' : 'Entrar'}
+              <button disabled={loading} className="w-full py-4 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl font-black text-lg shadow-xl shadow-blue-900/40 disabled:opacity-50">
+                {loading ? 'Verificando...' : isRegistering ? 'Registrarme' : 'Entrar con Email'}
               </button>
 
               <p className="text-center text-slate-500 text-sm mt-6">
                 {isRegistering ? '¿Ya tienes cuenta?' : '¿No tienes cuenta?'}
-                <button
-                  type="button"
-                  onClick={() => { setIsRegistering(!isRegistering); setAuthError(null); }}
-                  className="ml-2 text-blue-500 font-bold hover:underline"
-                >
+                <button type="button" onClick={() => { setIsRegistering(!isRegistering); setAuthError(null); }} className="ml-2 text-blue-500 font-bold hover:underline">
                   {isRegistering ? 'Inicia Sesión' : 'Regístrate gratis'}
                 </button>
               </p>
